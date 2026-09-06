@@ -1,0 +1,25 @@
+# Build directories
+/build/
+/cmake-build-*/
+
+# Python virtualenv with the SUMO toolchain (large, machine-specific)
+/.venv-sumo/
+__pycache__/
+*.pyc
+
+# Large generated datasets are reproducible; keep them out of VCS.
+# (small/medium/large are also regenerable via `make datasets`)
+/data/*.csv
+# ...but keep the real SUMO-derived sample:
+!/data/sumo_tripdata.csv
+
+# SUMO generated outputs (reproducible)
+/sumo/tripinfo.xml
+/sumo/fcd.xml
+
+# Benchmark artifacts are measured per-machine; keep the structure, ignore
+# nothing here so measured results can be committed deliberately.
+# (results/ and graphs/ are tracked so the recorded numbers are visible.)
+
+# OS noise
+.DS_Store

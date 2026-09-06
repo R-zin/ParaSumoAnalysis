@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  routes.rou.xml — vehicle demand for the SumoPara demo scenario.
+
+  The network is the 3x3 grid produced by netgenerate, whose edges are named
+  <fromJunction><toJunction> (e.g. A0B0 = left-to-right along the bottom row,
+  B0B1 = bottom-to-top along the middle column). The grid junctions are
+  A0 B0 C0 (bottom row), A1 B1 C1 (middle), A2 B2 C2 (top).
+
+  A single repeating flow injects vehicles on the bottom-left -> top-right
+  diagonal for 1000 s, exercising both through-movements and the guessed
+  traffic lights. Change `period` or add flows to scale the demand.
+-->
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+
+    <vType id="car" accel="2.6" decel="4.5" sigma="0.5"
+           length="5.0" maxSpeed="13.89" minGap="2.5"/>
+
+    <!-- Several flows converge on the two centre junctions (B1 / the grid
+         middle) so the guessed traffic lights become a bottleneck and the
+         waiting/delay metrics are non-trivial. Periods are in seconds. -->
+
+    <!-- bottom-left corner (A0) to top-right corner (C2), heavy -->
+    <flow id="diag" type="car" begin="0" end="1000" period="1.2"
+          departSpeed="max" departLane="best">
+        <route edges="A0B0 B0B1 B1C1 C1C2"/>
+    </flow>
+
+    <!-- opposite diagonal, heavy -->
+    <flow id="anti" type="car" begin="0" end="1000" period="1.4"
+          departSpeed="max" departLane="best">
+        <route edges="C2B2 B2B1 B1A1 A1A0"/>
+    </flow>
+
+    <!-- middle-row through traffic -->
+    <flow id="cross" type="car" begin="0" end="1000" period="1.6"
+          departSpeed="max" departLane="best">
+        <route edges="A1B1 B1C1"/>
+    </flow>
+
+    <!-- middle-column through traffic -->
+    <flow id="vert" type="car" begin="0" end="1000" period="1.8"
+          departSpeed="max" departLane="best">
+        <route edges="B0B1 B1B2"/>
+    </flow>
+</routes>

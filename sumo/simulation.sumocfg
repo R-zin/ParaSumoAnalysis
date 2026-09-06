@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  simulation.sumocfg — runnable SUMO configuration for the demo scenario.
+
+  Run it with:
+      sumo -c sumo/simulation.sumocfg
+
+  It writes two output files (relative to this configuration file):
+    tripinfo.xml — one record per *completed* vehicle trip with exactly the
+                   fields the C++ analyzer needs (duration, timeLoss,
+                   routeLength). Convert it with tools/sumo_tripinfo_to_csv.py.
+    fcd.xml      — floating-car data (per-timestep positions/speeds). Provided
+                   for completeness; the analyzer consumes tripinfo.
+-->
+<configuration xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/sumoConfiguration.xsd">
+
+    <input>
+        <net-file value="network.net.xml"/>
+        <route-files value="routes.rou.xml"/>
+    </input>
+
+    <time>
+        <begin value="0"/>
+        <end value="1300"/>
+        <step-length value="1.0"/>
+    </time>
+
+    <processing>
+        <!-- deterministic demand order for reproducible runs -->
+        <seed value="42"/>
+    </processing>
+
+    <output>
+        <tripinfo-output value="tripinfo.xml"/>
+        <fcd-output value="fcd.xml"/>
+    </output>
+
+    <report>
+        <verbose value="false"/>
+        <no-step-log value="true"/>
+    </report>
+</configuration>
