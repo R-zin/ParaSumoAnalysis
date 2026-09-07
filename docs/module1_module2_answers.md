@@ -219,6 +219,86 @@ The `default(none)` clause on the parallel region forces every shared variable
 to be listed explicitly, so an accidental capture is a *compile error*, not a
 latent race.
 
+## 3. Parallel algorithm (pseudocode)
+
+```text
+ALGORITHM analyze_parallel(vehicles, p)
+INPUT : array vehicles[0 .. N-1] of Vehicle{speed, travel, waiting, distance}
+        p = requested number of OpenMP threads
+OUTPUT: AnalysisResult R
+
+ 1  R.count ← N
+ 2  initialize totals/maxima ← 0
+ 3  initialize R.speed_histogram[0..6] ← 0
+
+ 4  start OpenMP parallel region with p threads
+
+ 5      each thread t creates private:
+            local_speed       ← 0
+            local_travel      ← 0
+            local_waiting     ← 0
+            local_distance    ← 0
+            local_delay       ← 0
+            local_max_travel  ← 0
+            local_max_waiting ← 0
+            local_histogram[0..6] ← 0
+
+ 6      divide vehicles[0 .. N-1] among threads using
+        schedule(static)
+
+ 7      for each vehicle v assigned to thread t do
+ 8          local_speed    ← local_speed    + v.speed
+ 9          local_travel   ← local_travel   + v.travel_time
+10          local_waiting  ← local_waiting  + v.waiting_time
+11          local_distance ← local_distance + v.distance
+
+12          local_max_travel  ← max(local_max_travel, v.travel_time)
+13          local_max_waiting ← max(local_max_waiting, v.waiting_time)
+
+14          if v.travel_time > 0 then
+15              local_delay ← local_delay +
+                    (v.waiting_time / v.travel_time)
+16          end if
+
+17          b ← speed_bucket(v.speed)
+18          local_histogram[b] ← local_histogram[b] + 1
+19      end for
+
+20      OpenMP reduction combines all thread-local:
+            local_speed       → total_speed
+            local_travel      → total_travel
+            local_waiting     → total_waiting
+            local_distance   → total_distance
+            local_delay       → total_delay
+            local_max_travel  → max_travel
+            local_max_waiting → max_waiting
+
+21      for b ← 0 to 6 do
+22          atomically add local_histogram[b]
+            to R.speed_histogram[b]
+23      end for
+
+24  end parallel region
+
+25  if N > 0 then
+26      R.average_speed     ← total_speed / N
+27      R.average_travel   ← total_travel / N
+28      R.average_waiting  ← total_waiting / N
+29      R.average_distance ← total_distance / N
+30      R.average_delay    ← total_delay / N
+31  end if
+
+32  R.total_speed      ← total_speed
+33  R.total_travel     ← total_travel
+34  R.total_waiting    ← total_waiting
+35  R.total_distance   ← total_distance
+36  R.max_travel       ← max_travel
+37  R.max_waiting      ← max_waiting
+38  R.speed_histogram  ← R.speed_histogram
+39  R.congestion_class ← classify(R.average_speed)
+
+40  return R
+
 ## 3. The OpenMP construct used
 
 ```cpp
