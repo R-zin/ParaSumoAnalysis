@@ -1,11 +1,6 @@
-# SumoPara — Module I & Module II Answers
+# SumoPara 
 
-> Consolidated from `docs/objective.md`, `docs/algorithm.md`, `docs/complexity.md`
-> (Module I) and `docs/parallelization.md`, `docs/verification.md`,
-> `docs/results.md` (Module II). All performance numbers were **measured** on
-> the machine described in §I.6 — nothing is fabricated.
 
----
 
 # MODULE I — Serial Implementation & Analysis
 
