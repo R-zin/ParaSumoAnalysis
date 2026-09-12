@@ -13,7 +13,6 @@
 #include <omp.h>
 
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -99,12 +98,10 @@ int main(int argc, char** argv) {
     double best_seconds = std::numeric_limits<double>::max();
     double total_seconds = 0.0;
     for (int iter = 0; iter < options.iterations; ++iter) {
-        const auto start = std::chrono::high_resolution_clock::now();
+        const double start = omp_get_wtime();
         result = traffic::analyze_openmp(vehicles, options.threads,
                                          &threads_used);
-        const auto stop = std::chrono::high_resolution_clock::now();
-        const double seconds =
-            std::chrono::duration<double>(stop - start).count();
+        const double seconds = omp_get_wtime() - start;
         best_seconds = std::min(best_seconds, seconds);
         total_seconds += seconds;
     }

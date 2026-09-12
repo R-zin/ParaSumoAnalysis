@@ -70,7 +70,7 @@ load CSV  ──►  [ start timer ──► analyze() ──► stop timer ]  �
  excluded            the only measured region                 excluded
 ```
 
-Timing uses `std::chrono::high_resolution_clock`, and the reported figure is
+Timing uses `omp_get_wtime()`, and the reported figure is
 the **best of `--iterations N`** repetitions inside the binary, further
 smoothed by the benchmark harness taking the **median of 7 outer
 repetitions**. File I/O, argument parsing, and printing are never inside the

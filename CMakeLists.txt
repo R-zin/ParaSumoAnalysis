@@ -67,6 +67,21 @@ add_library(traffic_common STATIC src/common/traffic_analysis.cpp)
 # ---------------------------------------------------------------------------
 add_executable(traffic_analysis_serial src/serial/traffic_analysis_serial.cpp)
 target_link_libraries(traffic_analysis_serial PRIVATE traffic_common)
+if(SUMOPARA_HAVE_OPENMP)
+    # Link OpenMP only so the serial timer can use omp_get_wtime() — the
+    # exact same wall clock as the OpenMP module (no parallel regions are
+    # created). When OpenMP is unavailable the code falls back to
+    # std::chrono::high_resolution_clock.
+    target_compile_definitions(traffic_analysis_serial
+        PRIVATE SUMOPARA_USE_OMP_WTIME)
+    target_link_libraries(traffic_analysis_serial PRIVATE ${SUMOPARA_OMP_LINK})
+    if(SUMOPARA_OMP_MANUAL_FLAGS)
+        target_compile_options(traffic_analysis_serial PRIVATE
+            ${SUMOPARA_OMP_MANUAL_FLAGS})
+        target_link_options(traffic_analysis_serial PRIVATE
+            ${SUMOPARA_OMP_MANUAL_FLAGS})
+    endif()
+endif()
 
 # ---------------------------------------------------------------------------
 # Module II — OpenMP analyzer (only when OpenMP is available).

@@ -9,12 +9,17 @@
 //   traffic_analysis_serial <input.csv> [--bench] [--iterations N]
 
 #include <algorithm>
-#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <string>
 #include <vector>
+
+#ifdef SUMOPARA_USE_OMP_WTIME
+#include <omp.h>
+#else
+#include <chrono>
+#endif
 
 #include "traffic_analysis.hpp"
 
@@ -86,11 +91,19 @@ int main(int argc, char** argv) {
     double best_seconds = std::numeric_limits<double>::max();
     double total_seconds = 0.0;
     for (int iter = 0; iter < options.iterations; ++iter) {
+        // Wall-clock timer: omp_get_wtime() whenever OpenMP is available
+        // (matching the OpenMP module exactly); std::chrono otherwise.
+#ifdef SUMOPARA_USE_OMP_WTIME
+        const double start = omp_get_wtime();
+        result = traffic::analyze_serial(vehicles);
+        const double seconds = omp_get_wtime() - start;
+#else
         const auto start = std::chrono::high_resolution_clock::now();
         result = traffic::analyze_serial(vehicles);
         const auto stop = std::chrono::high_resolution_clock::now();
         const double seconds =
             std::chrono::duration<double>(stop - start).count();
+#endif
         best_seconds = std::min(best_seconds, seconds);
         total_seconds += seconds;
     }

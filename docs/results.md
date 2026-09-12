@@ -10,7 +10,7 @@
 
 * **What is timed:** only the analysis computation. CSV parsing and printing
   happen outside the timed region in both binaries
-  (`std::chrono::high_resolution_clock`).
+  (`omp_get_wtime()`).
 * **Statistic:** each binary reports the *best of N* inner iterations
   (`--iterations`); the harness runs each cell *7 times* and reports the
   **median** (min/max spread is kept in the CSV so run-to-run variance is

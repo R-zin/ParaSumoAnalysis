@@ -129,8 +129,8 @@ reference and print PASS/FAIL. `--threads 0` lets the OpenMP runtime choose.
 
 * All performance numbers come from **actually running** the binaries;
   nothing is fabricated.
-* Timing excludes file I/O and uses `std::chrono::high_resolution_clock`;
-  the harness reports the median of repeated runs.
+* Timing excludes file I/O and uses OpenMP's `omp_get_wtime()` wall clock
+  in both binaries; the harness reports the median of repeated runs.
 * Same input data, compiler, optimization level, machine, and metric
   calculations are used for serial and parallel experiments.
 * Hardware/software environment is recorded in `docs/objective.md` and in
