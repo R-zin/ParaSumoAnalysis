@@ -1,11 +1,6 @@
-# SumoPara — Module I & Module II Answers
+# SumoPara 
 
-> Consolidated from `docs/objective.md`, `docs/algorithm.md`, `docs/complexity.md`
-> (Module I) and `docs/parallelization.md`, `docs/verification.md`,
-> `docs/results.md` (Module II). All performance numbers were **measured** on
-> the machine described in §I.6 — nothing is fabricated.
 
----
 
 # MODULE I — Serial Implementation & Analysis
 
@@ -219,6 +214,86 @@ The `default(none)` clause on the parallel region forces every shared variable
 to be listed explicitly, so an accidental capture is a *compile error*, not a
 latent race.
 
+## 3. Parallel algorithm (pseudocode)
+
+```text
+ALGORITHM analyze_parallel(vehicles, p)
+INPUT : array vehicles[0 .. N-1] of Vehicle{speed, travel, waiting, distance}
+        p = requested number of OpenMP threads
+OUTPUT: AnalysisResult R
+
+ 1  R.count ← N
+ 2  initialize totals/maxima ← 0
+ 3  initialize R.speed_histogram[0..6] ← 0
+
+ 4  start OpenMP parallel region with p threads
+
+ 5      each thread t creates private:
+            local_speed       ← 0
+            local_travel      ← 0
+            local_waiting     ← 0
+            local_distance    ← 0
+            local_delay       ← 0
+            local_max_travel  ← 0
+            local_max_waiting ← 0
+            local_histogram[0..6] ← 0
+
+ 6      divide vehicles[0 .. N-1] among threads using
+        schedule(static)
+
+ 7      for each vehicle v assigned to thread t do
+ 8          local_speed    ← local_speed    + v.speed
+ 9          local_travel   ← local_travel   + v.travel_time
+10          local_waiting  ← local_waiting  + v.waiting_time
+11          local_distance ← local_distance + v.distance
+
+12          local_max_travel  ← max(local_max_travel, v.travel_time)
+13          local_max_waiting ← max(local_max_waiting, v.waiting_time)
+
+14          if v.travel_time > 0 then
+15              local_delay ← local_delay +
+                    (v.waiting_time / v.travel_time)
+16          end if
+
+17          b ← speed_bucket(v.speed)
+18          local_histogram[b] ← local_histogram[b] + 1
+19      end for
+
+20      OpenMP reduction combines all thread-local:
+            local_speed       → total_speed
+            local_travel      → total_travel
+            local_waiting     → total_waiting
+            local_distance   → total_distance
+            local_delay       → total_delay
+            local_max_travel  → max_travel
+            local_max_waiting → max_waiting
+
+21      for b ← 0 to 6 do
+22          atomically add local_histogram[b]
+            to R.speed_histogram[b]
+23      end for
+
+24  end parallel region
+
+25  if N > 0 then
+26      R.average_speed     ← total_speed / N
+27      R.average_travel   ← total_travel / N
+28      R.average_waiting  ← total_waiting / N
+29      R.average_distance ← total_distance / N
+30      R.average_delay    ← total_delay / N
+31  end if
+
+32  R.total_speed      ← total_speed
+33  R.total_travel     ← total_travel
+34  R.total_waiting    ← total_waiting
+35  R.total_distance   ← total_distance
+36  R.max_travel       ← max_travel
+37  R.max_waiting      ← max_waiting
+38  R.speed_histogram  ← R.speed_histogram
+39  R.congestion_class ← classify(R.average_speed)
+
+40  return R
+
 ## 3. The OpenMP construct used
 
 ```cpp
@@ -257,75 +332,90 @@ latent race.
 * `if (num_threads > 0)` — lets callers pass 0 to defer to the runtime default
   without an illegal `num_threads(0)`.
 
-## 4. Threads, work distribution, synchronization
+## 4. Solution demonstration using small test cases
 
-* **Threads.** Team size is `num_threads` (or the runtime default, typically
-  the number of logical cores). The program prints `omp_get_num_procs()` so it
-  never pretends to have more hardware than exists.
-* **Work distribution.** `schedule(static)` assigns iteration range
-  `[k·N/p, (k+1)·N/p)` to thread `k`; uniform iteration cost ⇒ balanced, zero
-  scheduling overhead.
-* **Reduction.** Private partial sums live in registers/cache; the combine
-  happens once, in a tree of depth O(log p), at region end.
-* **Synchronization overhead.** Only two synchronization points: the barrier
-  at the end of `omp for` and the reduction/histogram merge at region end.
-  Both are O(p), independent of N — amortized to nothing for large N, but able
-  to exceed the saved work for small N (which is what the benchmarks show).
+The correctness of the parallel algorithm can be demonstrated using a small
+3-vehicle dataset where all expected results can be calculated manually.
+The same input is processed using the serial algorithm and the OpenMP
+parallel algorithm.
 
-## 5. Floating-point determinism caveat
+### Test Case 1 — Basic aggregation
 
-Parallel reduction reorders floating-point additions, and FP addition is not
-associative. The OpenMP result can therefore differ from the serial result by
-a few ulps per aggregate — for a 1M-row dataset with totals ~1e9 this is an
-absolute difference of ~1e-5, i.e. a **relative** difference of ~1e-13.
+Input:
 
-This is expected and is **not** a bug. Verification therefore uses an explicit
-**magnitude-scaled relative tolerance** (`kResultTolerance = 1e-9`,
-`results_equal()`), not bitwise equality. 1e-9 is ~4 orders of magnitude
-looser than the observed reordering noise yet far tighter than any real logic
-error or race, so it catches genuine bugs while tolerating legitimate
-reordering. See `tests/test_correctness.cpp` and the `--verify` flag.
+| Vehicle | Speed | Travel Time | Waiting Time | Distance |
+|---|---:|---:|---:|---:|
+| V1 | 10 | 100 | 20 | 900 |
+| V2 | 20 | 80 | 10 | 1200 |
+| V3 | 15 | 90 | 15 | 1000 |
 
-## 6. Demonstrated scaling and why it is not linear (measured)
+Expected result:
 
-Measured medians (serial baseline), Apple M2 8-core, LLVM clang 22.1.8 `-O2`:
+```text
+Number of vehicles = 3
 
-| Dataset | Serial (s) | 2 thr | 4 thr | 8 thr | best S(serial) |
-|---------|-----------|-------|-------|-------|----------------|
-| 10K     | ~2.4e-5   | 0.87× | 0.90× | 0.46× | never > 1 |
-| 100K    | ~2.4e-4   | 1.45× | 2.43× | 1.56× | 2.43× @ 4 |
-| 1M      | ~2.4e-3   | 1.54× | 2.69× | 2.56× | 2.69× @ 4 |
-| 5M      | ~1.2e-2   | 1.56× | 2.79× | 2.73× | 2.79× @ 4 |
-| 10M     | ~2.4e-2   | 1.57× | 2.82× | 2.75× | 2.82× @ 4 |
+Total speed       = 10 + 20 + 15
+                  = 45
 
-The benchmark results in `benchmarks/results/` show sub-linear scaling. The
-causes, in order of importance for *this* kernel:
+Average speed     = 45 / 3
+                  = 15
 
-1. **Memory-bandwidth bound.** Each record needs ~3 FLOPs but ~32 bytes of
-   reads — arithmetic intensity ≈ 0.1 FLOP/byte. A few cores already saturate
-   the memory bus; additional threads queue on bandwidth and add nothing
-   (hence the ~2.8× plateau at 4 threads).
-2. **Limited parallel fraction (Amdahl).** Loading, averaging, and printing
-   are serial; only the aggregation loop is parallel, capping the maximum
-   speedup regardless of thread count.
-3. **Reduction & merge overhead.** Combining partial results costs O(p) work
-   at the end; on tiny datasets it can exceed the parallel gain.
-4. **Thread-team startup.** Creating/waking the team costs microseconds —
-   comparable to the *entire* 10K-vehicle computation, which is why small
-   datasets show speedup ≈ 1 or even < 1.
-5. **Cache behaviour.** Each thread streams a disjoint chunk; with 8 threads
-   the working set exceeds cache and every read goes to main memory.
-6. **Core count.** The machine has 8 logical cores, so thread counts beyond
-   that cannot help and may hurt.
+Total travel time = 100 + 80 + 90
+                  = 270
 
-These are the honest, measured reasons the project reports the numbers it does
-rather than claiming near-linear speedup.
+Average travel    = 270 / 3
+                  = 90
+
+Total waiting     = 20 + 10 + 15
+                  = 45
+
+Average waiting   = 45 / 3
+                  = 15
+
+Total distance    = 900 + 1200 + 1000
+                  = 3100
+
+Average distance  = 3100 / 3
+                  = 1033.33
+
+Maximum travel    = 100
+Maximum waiting   = 20
+```
+## 5. Time Analysis of Parallel Implementation
+
+Let:
+- $N$ = number of vehicle records
+- $p$ = number of OpenMP threads
+- $t_{\text{iter}}$ = time per record ($\approx$ constant FLOPs and conditional branch)
+- $T_{\text{overhead}}(p)$ = thread spawn, barrier, and reduction combine overhead
+
+### 1. Theoretical Model
+The parallel loop divides work statically as $\lceil N/p \rceil$ iterations per thread:
+
+$$T_p(N) = \frac{N \cdot t_{\text{iter}}}{p} + T_{\text{overhead}}(p)$$
+
+* **Time Complexity:** $O(N)$ overall. Parallelization reduces the constant factor ($\approx \frac{c}{p}$) without altering asymptotic growth.
+* **Overhead Costs:** Includes $O(p)$ thread creation, $O(\log p)$ scalar reduction tree, and $O(p)$ atomic merges for the 7-bucket histogram ($7 \times p$ ops).
 
 ---
 
-*Evidence: `benchmarks/results/benchmark_results.csv` (raw measured data),
-`benchmarks/results/benchmark_summary.md` (auto-generated table),
-`benchmarks/graphs/*.svg` (speedup/efficiency/time figures),
-`docs/results.md` (full discussion). Correctness: `tests/test_correctness.cpp`
-(24/24 PASS) and the `--verify` flag (serial ≡ OpenMP within 1e-9 on all
-datasets, including the real SUMO CSV).*
+### 2. Measured Scaling (Apple M2, 8 Logical Cores)
+
+| Dataset ($N$) | Serial $T_1$ | 2 Threads | 4 Threads | 8 Threads | Peak Speedup | Peak Efficiency |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **10K** | 24 µs | 28 µs | 27 µs | 52 µs | 0.90× (@ 4t) | 22.5% |
+| **100K** | 240 µs | 166 µs | 99 µs | 154 µs | 2.43× (@ 4t) | 60.8% |
+| **1M** | 2.40 ms | 1.56 ms | 0.89 ms | 0.94 ms | 2.69× (@ 4t) | 67.3% |
+| **5M** | 12.0 ms | 7.69 ms | 4.30 ms | 4.40 ms | 2.79× (@ 4t) | 69.8% |
+| **10M** | 24.0 ms | 15.3 ms | 8.51 ms | 8.73 ms | **2.82×** (@ 4t) | **70.5%** |
+
+---
+
+### 3. Key Observations & Bottlenecks
+
+1. **Memory Bandwidth Bound (Primary):**
+   Arithmetic intensity is extremely low ($\approx 0.094$ FLOP/byte: 3 FLOPs per 32 bytes read). Memory bus saturates at ~4 threads, causing speedup to plateau at **~2.82×**.
+2. **Small Dataset Overhead ($N = 10\text{K}$):**
+   Thread team management ($\approx 10\text{--}30\ \mu\text{s}$) exceeds serial compute time ($24\ \mu\text{s}$), resulting in a net slowdown ($S(p) < 1$).
+3. **Core Oversubscription ($p = 8$):**
+   Scaling to 8 threads adds memory bus contention and cache thrashing without offering extra memory throughput, slightly degrading performance compared to 4 threads.
